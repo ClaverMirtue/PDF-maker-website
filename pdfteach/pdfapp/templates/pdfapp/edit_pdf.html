@@ -1,0 +1,523 @@
+{% extends "pdfapp/base.html" %}
+{% load static %}
+
+{% block title %}Edit PDF{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 60px 0;
+        margin-top: -1.5rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 15px;
+        padding: 3rem;
+        text-align: center;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 2rem 0;
+    }
+
+    .drop-zone:hover {
+        border-color: #fff;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .editor-container {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+        min-height: 500px;
+    }
+
+    .toolbar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+    }
+
+    .toolbar button {
+        padding: 8px 15px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .toolbar button:hover {
+        background: #e9ecef;
+    }
+
+    .toolbar button.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+
+    #pdfViewer {
+        width: 100%;
+        height: 800px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+
+    .canvas-container {
+        position: relative;
+        margin: 20px 0;
+    }
+
+    #drawingCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: crosshair;
+    }
+
+    .page-navigation {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin: 20px 0;
+    }
+
+    .tool-options {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-left: 20px;
+    }
+
+    .tool-options input,
+    .tool-options select {
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    .canvas-container {
+        position: relative;
+        margin: 20px 0;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="upload-section">
+    <div class="container">
+        <div class="text-center">
+            <h1 class="display-4 mb-4">Edit PDF</h1>
+            <p class="lead">Modify your PDF files with our advanced editing tools</p>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                {% csrf_token %}
+                <div class="drop-zone" id="dropZone">
+                    <i class="fas fa-file-pdf mb-3" style="font-size: 3rem;"></i>
+                    <h4>Drag & Drop PDF Here</h4>
+                    <p class="mb-2">or</p>
+                    <button class="btn btn-light" onclick="document.getElementById('fileInput').click()">
+                        Choose PDF
+                    </button>
+                    <input type="file" id="fileInput" hidden accept=".pdf">
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="container mt-5" id="editorContainer" style="display: none;">
+    <div class="editor-container">
+        <div class="toolbar">
+            <button id="textTool" class="tool-btn"><i class="fas fa-font"></i> Text</button>
+            <button id="drawTool" class="tool-btn"><i class="fas fa-pen"></i> Draw</button>
+            <button id="shapeTool" class="tool-btn"><i class="fas fa-shapes"></i> Shape</button>
+            <button id="highlightTool" class="tool-btn"><i class="fas fa-highlighter"></i> Highlight</button>
+            <button id="imageTool" class="tool-btn"><i class="fas fa-image"></i> Image</button>
+            <div class="ms-auto">
+                <button id="undoBtn"><i class="fas fa-undo"></i></button>
+                <button id="redoBtn"><i class="fas fa-redo"></i></button>
+                <button id="saveBtn" class="btn btn-primary"><i class="fas fa-save"></i> Save PDF</button>
+            </div>
+        </div>
+
+        <div class="page-navigation">
+            <button id="prevPage" class="btn btn-secondary" disabled><i class="fas fa-chevron-left"></i></button>
+            <span id="pageInfo">Page 1 of 1</span>
+            <button id="nextPage" class="btn btn-secondary" disabled><i class="fas fa-chevron-right"></i></button>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="drawingCanvas"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const editorContainer = document.getElementById('editorContainer');
+    const pdfCanvas = document.getElementById('pdfCanvas');
+    const drawingCanvas = document.getElementById('drawingCanvas');
+    const ctx = drawingCanvas.getContext('2d');
+    
+    let currentPDF = null;
+    let currentPage = 1;
+    let totalPages = 1;
+    let scale = 1.5;
+    let currentTool = null;
+    let isDrawing = false;
+    let drawingHistory = [];
+    let redoHistory = [];
+    let textBoxes = [];
+    let shapes = [];
+    let selectedElement = null;
+    
+    // Drawing settings
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    
+    // Initialize tools
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentTool = this.id;
+            drawingCanvas.style.cursor = currentTool === 'drawTool' ? 'crosshair' : 'default';
+            
+            // Show relevant options based on tool
+            if (currentTool === 'textTool') {
+                showTextOptions();
+            } else if (currentTool === 'shapeTool') {
+                showShapeOptions();
+            }
+        });
+    });
+
+    // Add tool options container
+    const toolOptionsContainer = document.createElement('div');
+    toolOptionsContainer.className = 'tool-options';
+    document.querySelector('.toolbar').appendChild(toolOptionsContainer);
+
+    function showTextOptions() {
+        toolOptionsContainer.innerHTML = `
+            <input type="color" id="textColor" value="#000000">
+            <select id="fontSize">
+                <option value="12">12px</option>
+                <option value="16">16px</option>
+                <option value="20">20px</option>
+                <option value="24">24px</option>
+            </select>
+            <select id="fontFamily">
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+            </select>
+        `;
+    }
+
+    function showShapeOptions() {
+        toolOptionsContainer.innerHTML = `
+            <input type="color" id="shapeColor" value="#000000">
+            <select id="shapeType">
+                <option value="rectangle">Rectangle</option>
+                <option value="circle">Circle</option>
+                <option value="line">Line</option>
+            </select>
+            <input type="number" id="shapeSize" value="2" min="1" max="10">
+        `;
+    }
+
+    // Text Tool Implementation
+    drawingCanvas.addEventListener('click', (e) => {
+        if (currentTool === 'textTool') {
+            const textBox = document.createElement('div');
+            textBox.contentEditable = true;
+            textBox.style.position = 'absolute';
+            textBox.style.left = e.offsetX + 'px';
+            textBox.style.top = e.offsetY + 'px';
+            textBox.style.minWidth = '100px';
+            textBox.style.minHeight = '20px';
+            textBox.style.padding = '5px';
+            textBox.style.border = '1px dashed #000';
+            textBox.style.color = document.getElementById('textColor')?.value || '#000000';
+            textBox.style.fontSize = document.getElementById('fontSize')?.value + 'px' || '16px';
+            textBox.style.fontFamily = document.getElementById('fontFamily')?.value || 'Arial';
+            
+            document.querySelector('.canvas-container').appendChild(textBox);
+            textBox.focus();
+            textBoxes.push(textBox);
+        }
+    });
+
+    // Shape Tool Implementation
+    let shapeStart = null;
+    
+    drawingCanvas.addEventListener('mousedown', (e) => {
+        if (currentTool === 'shapeTool') {
+            shapeStart = { x: e.offsetX, y: e.offsetY };
+        }
+    });
+
+    drawingCanvas.addEventListener('mousemove', (e) => {
+        if (currentTool === 'shapeTool' && shapeStart) {
+            const shapeType = document.getElementById('shapeType')?.value || 'rectangle';
+            const color = document.getElementById('shapeColor')?.value || '#000000';
+            const size = document.getElementById('shapeSize')?.value || 2;
+            
+            // Clear the temporary drawing
+            const tempCtx = drawingCanvas.getContext('2d');
+            tempCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            
+            // Draw the shape
+            tempCtx.beginPath();
+            tempCtx.strokeStyle = color;
+            tempCtx.lineWidth = size;
+            
+            if (shapeType === 'rectangle') {
+                tempCtx.rect(
+                    shapeStart.x,
+                    shapeStart.y,
+                    e.offsetX - shapeStart.x,
+                    e.offsetY - shapeStart.y
+                );
+            } else if (shapeType === 'circle') {
+                const radius = Math.sqrt(
+                    Math.pow(e.offsetX - shapeStart.x, 2) +
+                    Math.pow(e.offsetY - shapeStart.y, 2)
+                );
+                tempCtx.arc(shapeStart.x, shapeStart.y, radius, 0, Math.PI * 2);
+            } else if (shapeType === 'line') {
+                tempCtx.moveTo(shapeStart.x, shapeStart.y);
+                tempCtx.lineTo(e.offsetX, e.offsetY);
+            }
+            
+            tempCtx.stroke();
+        }
+    });
+
+    drawingCanvas.addEventListener('mouseup', () => {
+        if (currentTool === 'shapeTool' && shapeStart) {
+            shapes.push({
+                type: document.getElementById('shapeType')?.value || 'rectangle',
+                start: shapeStart,
+                end: { x: event.offsetX, y: event.offsetY },
+                color: document.getElementById('shapeColor')?.value || '#000000',
+                size: document.getElementById('shapeSize')?.value || 2
+            });
+            shapeStart = null;
+            saveDrawingState();
+        }
+    });
+
+    // Image Tool Implementation
+    document.getElementById('imageTool').addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const ctx = drawingCanvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        saveDrawingState();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    });
+
+    // Save drawing state for undo/redo
+    function saveDrawingState() {
+        drawingHistory.push(drawingCanvas.toDataURL());
+        redoHistory = [];
+    }
+
+    // Undo/Redo Implementation
+    document.getElementById('undoBtn').addEventListener('click', () => {
+        if (drawingHistory.length > 0) {
+            redoHistory.push(drawingCanvas.toDataURL());
+            const previousState = drawingHistory.pop();
+            loadDrawingState(previousState);
+        }
+    });
+
+    document.getElementById('redoBtn').addEventListener('click', () => {
+        if (redoHistory.length > 0) {
+            drawingHistory.push(drawingCanvas.toDataURL());
+            const nextState = redoHistory.pop();
+            loadDrawingState(nextState);
+        }
+    });
+
+    function loadDrawingState(state) {
+        const img = new Image();
+        img.onload = () => {
+            const ctx = drawingCanvas.getContext('2d');
+            ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = state;
+    }
+
+    // Handle file upload
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    dropZone.addEventListener('drop', handleDrop);
+    fileInput.addEventListener('change', handleFiles);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles({ target: { files: files } });
+    }
+
+    async function handleFiles(e) {
+        const file = e.target.files[0];
+        if (file && file.type === 'application/pdf') {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                currentPDF = pdf;
+                totalPages = pdf.numPages;
+                editorContainer.style.display = 'block';
+                renderPage(1);
+                updatePageInfo();
+            } catch (error) {
+                alert('Error loading PDF: ' + error.message);
+            }
+        } else {
+            alert('Please select a valid PDF file');
+        }
+    }
+
+    async function renderPage(pageNumber) {
+        try {
+            const page = await currentPDF.getPage(pageNumber);
+            const viewport = page.getViewport({ scale });
+
+            // Set canvas sizes
+            pdfCanvas.width = viewport.width;
+            pdfCanvas.height = viewport.height;
+            drawingCanvas.width = viewport.width;
+            drawingCanvas.height = viewport.height;
+
+            // Render PDF page
+            await page.render({
+                canvasContext: pdfCanvas.getContext('2d'),
+                viewport: viewport
+            }).promise;
+
+            currentPage = pageNumber;
+            updatePageInfo();
+        } catch (error) {
+            console.error('Error rendering page:', error);
+        }
+    }
+
+    function updatePageInfo() {
+        document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+        document.getElementById('prevPage').disabled = currentPage <= 1;
+        document.getElementById('nextPage').disabled = currentPage >= totalPages;
+    }
+
+    // Page navigation
+    document.getElementById('prevPage').addEventListener('click', () => {
+        if (currentPage > 1) renderPage(currentPage - 1);
+    });
+
+    document.getElementById('nextPage').addEventListener('click', () => {
+        if (currentPage < totalPages) renderPage(currentPage + 1);
+    });
+
+    // Drawing functionality
+    drawingCanvas.addEventListener('mousedown', startDrawing);
+    drawingCanvas.addEventListener('mousemove', draw);
+    drawingCanvas.addEventListener('mouseup', stopDrawing);
+    drawingCanvas.addEventListener('mouseout', stopDrawing);
+
+    function startDrawing(e) {
+        if (currentTool === 'drawTool') {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+            ctx.strokeStyle = document.getElementById('drawColor')?.value || '#000000';
+            ctx.lineWidth = document.getElementById('drawSize')?.value || 2;
+        }
+    }
+
+    function draw(e) {
+        if (!isDrawing || currentTool !== 'drawTool') return;
+        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.stroke();
+    }
+
+    function stopDrawing() {
+        if (isDrawing) {
+            isDrawing = false;
+            saveDrawingState();
+        }
+    }
+
+    // Save functionality
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        try {
+            const formData = new FormData();
+            formData.append('edited_pdf', 'true');
+            // Add your PDF editing data here
+            
+            const response = await fetch('{% url "pdfapp:edit_pdf" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+
+            if (response.ok) {
+                alert('PDF saved successfully!');
+            } else {
+                throw new Error('Failed to save PDF');
+            }
+        } catch (error) {
+            alert('Error saving PDF: ' + error.message);
+        }
+    });
+</script>
+{% endblock %} 

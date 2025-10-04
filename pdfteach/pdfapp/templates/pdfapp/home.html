@@ -1,0 +1,251 @@
+{% extends "pdfapp/base.html" %}
+{% load static %}
+
+{% block title %}PDF Management - Home{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 100px 0;
+        margin-top: -1.5rem;
+    }
+
+    .feature-card {
+        border: none;
+        transition: transform 0.3s ease;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .feature-card:hover {
+        transform: translateY(-10px);
+    }
+
+    .feature-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #667eea;
+    }
+
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 15px;
+        padding: 3rem;
+        text-align: center;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone:hover {
+        border-color: #667eea;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .stats-section {
+        background: #f8f9fa;
+        padding: 80px 0;
+    }
+
+    .stat-card {
+        text-align: center;
+        padding: 30px;
+    }
+
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .how-it-works {
+        padding: 80px 0;
+    }
+
+    .step-card {
+        text-align: center;
+        padding: 30px;
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        background: #667eea;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 mb-4">Transform Your PDF Experience</h1>
+                <p class="lead mb-4">Edit, convert, and manage your PDF files with ease. Professional tools made simple.</p>
+                {% if not user.is_authenticated %}
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg me-md-2">Get Started</a>
+                        <a href="{% url 'account_login' %}" class="btn btn-outline-light btn-lg">Sign In</a>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="col-lg-6">
+                <div class="drop-zone mt-4 mt-lg-0">
+                    <i class="fas fa-cloud-upload-alt mb-3" style="font-size: 3rem;"></i>
+                    <h4>Drag & Drop Files Here</h4>
+                    <p class="mb-0">or click to browse</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="container py-5">
+    <h2 class="text-center mb-5">Our Features</h2>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card feature-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-edit feature-icon"></i>
+                    <h3>Edit PDF</h3>
+                    <p>Modify your PDF files with our advanced editing tools. Add text, images, and annotations.</p>
+                    <a href="{% url 'pdfapp:edit_pdf' %}" class="btn btn-primary">Start Editing</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card feature-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-word feature-icon"></i>
+                    <h3>Word to PDF</h3>
+                    <p>Convert Word documents to PDF format while maintaining formatting and layout.</p>
+                    <a href="{% url 'pdfapp:word_to_pdf' %}" class="btn btn-primary">Convert Now</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card feature-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-images feature-icon"></i>
+                    <h3>Image to PDF</h3>
+                    <p>Transform your images into professional PDF documents in seconds.</p>
+                    <a href="{% url 'pdfapp:image_to_pdf' %}" class="btn btn-primary">Convert Images</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Stats Section -->
+<section class="stats-section">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">1M+</div>
+                    <h4>Files Processed</h4>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">500K+</div>
+                    <h4>Happy Users</h4>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">99.9%</div>
+                    <h4>Uptime</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How It Works -->
+<section class="how-it-works">
+    <div class="container">
+        <h2 class="text-center mb-5">How It Works</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h4>Upload Your File</h4>
+                    <p>Drag and drop or select your file to upload</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h4>Choose Action</h4>
+                    <p>Select what you want to do with your file</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h4>Download Result</h4>
+                    <p>Get your processed file instantly</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://kit.fontawesome.com/your-font-awesome-kit.js"></script>
+<script>
+    // Drag and drop functionality
+    const dropZone = document.querySelector('.drop-zone');
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('border-primary');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('border-primary');
+    }
+
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    }
+
+    function handleFiles(files) {
+        // Add your file handling logic here
+        console.log(files);
+    }
+</script>
+{% endblock %} 

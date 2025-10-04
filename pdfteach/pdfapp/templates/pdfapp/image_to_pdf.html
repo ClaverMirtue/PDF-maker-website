@@ -1,0 +1,224 @@
+{% extends "pdfapp/base.html" %}
+{% load static %}
+
+{% block title %}Convert Images to PDF{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 60px 0;
+        margin-top: -1.5rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 15px;
+        padding: 3rem;
+        text-align: center;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 2rem 0;
+    }
+
+    .drop-zone:hover {
+        border-color: #fff;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .image-preview {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .image-item {
+        position: relative;
+        border-radius: 8px;
+        overflow: hidden;
+        aspect-ratio: 1;
+    }
+
+    .image-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .image-item .remove-btn {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: rgba(255,255,255,0.9);
+        border: none;
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="upload-section">
+    <div class="container">
+        <div class="text-center">
+            <h1 class="display-4 mb-4">Convert Images to PDF</h1>
+            <p class="lead">Combine multiple images into a single PDF file</p>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                {% csrf_token %}
+                <div class="drop-zone" id="dropZone">
+                    <i class="fas fa-images mb-3" style="font-size: 3rem;"></i>
+                    <h4>Drag & Drop Images Here</h4>
+                    <p class="mb-2">or</p>
+                    <button class="btn btn-light" onclick="document.getElementById('fileInput').click()">
+                        Choose Images
+                    </button>
+                    <input type="file" id="fileInput" hidden accept="image/*" multiple>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+            <div class="image-preview" id="imagePreview">
+                <!-- Image previews will be added here -->
+            </div>
+            <div class="text-center mt-4">
+                <button class="btn btn-primary btn-lg" id="convertBtn" disabled>
+                    Create PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const convertBtn = document.getElementById('convertBtn');
+    let files = [];
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('border-light');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('border-light');
+    }
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', handleDrop, false);
+    fileInput.addEventListener('change', handleFiles);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const newFiles = [...dt.files].filter(file => file.type.startsWith('image/'));
+        files = [...files, ...newFiles];
+        updatePreview();
+    }
+
+    function handleFiles(e) {
+        const newFiles = [...e.target.files].filter(file => file.type.startsWith('image/'));
+        files = [...files, ...newFiles];
+        updatePreview();
+    }
+
+    function updatePreview() {
+        imagePreview.innerHTML = files.map((file, index) => `
+            <div class="image-item">
+                <img src="${URL.createObjectURL(file)}" alt="${file.name}">
+                <button class="remove-btn" onclick="removeImage(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('');
+        
+        convertBtn.disabled = files.length === 0;
+    }
+
+    function removeImage(index) {
+        files.splice(index, 1);
+        updatePreview();
+    }
+
+    // Handle conversion
+    convertBtn.addEventListener('click', async () => {
+        const formData = new FormData();
+        files.forEach((file, index) => {
+            formData.append('images[]', file, file.name);
+        });
+
+        try {
+            convertBtn.disabled = true;
+            convertBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating PDF...';
+            
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const response = await fetch('{% url "pdfapp:image_to_pdf" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                },
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'images.pdf';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                files = [];
+                updatePreview();
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Conversion failed');
+            }
+        } catch (error) {
+            alert('Error creating PDF: ' + error.message);
+        } finally {
+            convertBtn.disabled = false;
+            convertBtn.innerHTML = 'Create PDF';
+        }
+    });
+</script>
+{% endblock %} 

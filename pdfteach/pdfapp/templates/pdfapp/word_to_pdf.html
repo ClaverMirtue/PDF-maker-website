@@ -1,0 +1,228 @@
+{% extends "pdfapp/base.html" %}
+{% load static %}
+
+{% block title %}Convert Word to PDF{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 60px 0;
+        margin-top: -1.5rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 15px;
+        padding: 3rem;
+        text-align: center;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 2rem 0;
+    }
+
+    .drop-zone:hover {
+        border-color: #fff;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .file-list {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .file-item:last-child {
+        border-bottom: none;
+    }
+
+    .file-icon {
+        font-size: 24px;
+        margin-right: 15px;
+        color: #667eea;
+    }
+
+    .file-info {
+        flex-grow: 1;
+    }
+
+    .file-name {
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .file-size {
+        font-size: 0.875rem;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="upload-section">
+    <div class="container">
+        <div class="text-center">
+            <h1 class="display-4 mb-4">Convert Word to PDF</h1>
+            <p class="lead">Transform your Word documents into professional PDF files instantly</p>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                {% csrf_token %}
+                <div class="drop-zone" id="dropZone">
+                    <i class="fas fa-file-word mb-3" style="font-size: 3rem;"></i>
+                    <h4>Drag & Drop Word Files Here</h4>
+                    <p class="mb-2">or</p>
+                    <button class="btn btn-light" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                    <input type="file" id="fileInput" hidden accept=".doc,.docx" multiple>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="file-list" id="fileList" style="display: none;">
+                <h3 class="mb-4">Selected Files</h3>
+                <div id="fileItems">
+                    <!-- File items will be added here -->
+                </div>
+                <div class="text-center mt-4">
+                    <button class="btn btn-primary btn-lg" id="convertBtn" disabled>
+                        Convert to PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileList = document.getElementById('fileList');
+    const fileItems = document.getElementById('fileItems');
+    const convertBtn = document.getElementById('convertBtn');
+    
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('border-light');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('border-light');
+    }
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', handleDrop, false);
+    fileInput.addEventListener('change', handleFiles);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles({ target: { files: files } });
+    }
+
+    function handleFiles(e) {
+        const files = [...e.target.files];
+        fileList.style.display = 'block';
+        convertBtn.disabled = files.length === 0;
+        
+        fileItems.innerHTML = files.map(file => `
+            <div class="file-item">
+                <i class="fas fa-file-word file-icon"></i>
+                <div class="file-info">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${formatFileSize(file.size)}</div>
+                </div>
+                <div class="file-status">
+                    <i class="fas fa-check-circle text-success"></i>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Handle conversion
+    convertBtn.addEventListener('click', async () => {
+        const formData = new FormData();
+        [...fileInput.files].forEach(file => {
+            formData.append('files[]', file);
+        });
+
+        try {
+            convertBtn.disabled = true;
+            convertBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Converting...';
+            
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const response = await fetch('{% url "pdfapp:word_to_pdf" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'converted.pdf';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                throw new Error('Conversion failed');
+            }
+        } catch (error) {
+            alert('Error converting files: ' + error.message);
+        } finally {
+            convertBtn.disabled = false;
+            convertBtn.innerHTML = 'Convert to PDF';
+        }
+    });
+</script>
+{% endblock %} 
